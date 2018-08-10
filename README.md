@@ -8,4 +8,4 @@ The rough goal of this project is to find the parameters for generating function
 3. Calculate global measures for each connectivity matrix.
 
 #### Required packages to generate FC matrices:
-nilearn, nibabel, scipy, numpy, os, pandas
+nilearn, nibabel, scipy, numpy, os, pandas, bctpy (Brain Connectivity Toolbox for Python)
