@@ -91,3 +91,73 @@ def beta_lin_comb(path, beta):
                         gv_array[idx] += beta_final[idx_thr] * row
             idx += 1
     return sub_list, ses_list, gv_array
+
+def calc_graph_vector(filename, thresholds) :
+    '''
+    This function calculates graph measures for connectivity matrix loaded from textfile
+    and save results under the same name with additional superscript +'_GV' (in same dir
+    filename is located)
+    
+    Input arguments:                                               
+        filename(str):     name of file containing connectivity matrix (txt extension)
+        thresholds(list):  list containing thresholds of interest        #
+    
+    Kamil Bonna, 14.08.2018 
+    '''
+    #--- check inputs
+    import os
+    if not os.path.exists(filename):
+        raise Exception('{} does not exist'.format(filename))
+    if type(thresholds) != list: 
+        raise Exception('thresholds should be a list!')
+        
+    import numpy as np
+    import bct
+
+    #=== inner variables
+    N_rep_louvain = 10   # number of Louvain algorithm repetitions
+    N_measures = 10      # number of graph measures
+    gamma = 1            # Louvain resolution parameter
+    
+    #--- load matrix 
+    A_raw = np.loadtxt(filename)
+    N = A_raw.shape[0]   # number of nodes
+    M_sat = N*(N-1)/2    # max number of connections 
+
+    #=== calculate output
+    graph_measures = np.zeros([ len(thresholds), N_measures ])  # create empty output matrix
+    for thr in range(len(thresholds)) : 
+        #--- thresholding 
+        A = bct.threshold_proportional( A_raw, p=thresholds[thr], copy=True );
+        A[np.nonzero(A<0)] = 0                                  # ensure only positive weights
+        M_act = A[np.nonzero(A>0)].shape[0] / 2                 # actual number of nonzero connections
+        #--- calculate measures
+        #-- mean connection strenght 
+        S = np.sum(A)/M_act
+        #-- connection strenght std
+        Svar = np.std(A[np.nonzero(A)])
+        #-- modularity
+        [M,Q] = bct.modularity_louvain_und(A, gamma)
+        for i in range(N_rep_louvain) :
+            [Mt,Qt] = bct.modularity_louvain_und(A, gamma)
+            if Qt > Q :
+                Q = Qt
+                M = Mt
+        #-- participation coefficient
+        P = np.mean(bct.participation_coef_sign(A, M))
+        #-- clustering 
+        C = np.mean(bct.clustering_coef_wu(A))
+        #-- transitivity 
+        T = bct.transitivity_wu(A)
+        #-- assortativity
+        Asso = bct.assortativity_wei(A)
+        #-- global & local efficiency 
+        Eglo = bct.efficiency_wei(A)
+        Eloc = np.mean(bct.efficiency_wei(A, local=True))
+        #-- mean eigenvector centralit
+        Eig = np.mean(bct.eigenvector_centrality_und(A))
+        #--- write vector to matrix
+        graph_measures[thr] = [ S, Svar, Q, P, C, T, Asso, Eglo, Eloc, Eig ]
+
+    #=== save results to file
+    np.savetxt( filename[:-4]+'_GV.txt', graph_measures )
