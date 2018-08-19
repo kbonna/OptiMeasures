@@ -63,6 +63,7 @@ def beta_lin_comb(path, beta):
         if sum(file.find(sub) != -1 for file in gv_files) != N_atl*N_mod*4:
             subs.remove(sub)
     subs = list(subs)
+    subs.sort(key=str)
     if not subs: raise Exception('graph vector files not found or incomplete!')
     #--- normalize beta & exclude unused files & beta=0 values
     beta = normalize_beta(beta)
@@ -161,3 +162,51 @@ def calc_graph_vector(filename, thresholds) :
 
     #=== save results to file
     np.savetxt( filename[:-4]+'_GV.txt', graph_measures )
+    
+def quality_function(sub_list, gv_array):
+    '''
+    This  function calculates identifiability quality function comparing within-subject
+    similarity (wss) in graph vectors with between-subject similartiy (bss). Similarity 
+    is measured by cosine distance between graph vectors.
+    
+    Input parameters: 
+        sub_list(list):       list of subject numbers corresponding to rows of gv_array
+        gv_array(np.ndarray): each row contains subject graph vector, shape is 
+                              (N_sub*N_ses, N_gvm)
+                              
+    Output is single number quality = wss - bss
+    
+    Kamil Bonna, 19.08.2018
+    '''
+    from math import sqrt
+    from scipy.special import comb
+    import numpy as np
+    import itertools
+
+    def dot(A,B): 
+        return (sum(a*b for a,b in zip(A,B)))
+    def cosine_similarity(a,b):
+        return dot(a,b) / ( (dot(a,a) **.5) * (dot(b,b) ** .5) )
+
+    #--- create dictionary
+    sub_dict = {}
+    for sub in set(sub_list):
+        sub_dict[sub] = [ idx for idx, x in enumerate(sub_list) if sub==x ] 
+    N_sub = len(sub_dict)
+    N_ses = 4
+
+    #--- within subject similarity
+    within_sub_sum = 0
+    for sub in set(sub_list):
+        for index_pair in itertools.combinations(sub_dict[sub], r=2):
+            within_sub_sum += cosine_similarity(gv_array[index_pair[0]], gv_array[index_pair[1]])
+    within_sub_sum /= comb(N=N_ses, k=2)*N_sub
+
+    #--- between subject similarity
+    betwen_sub_sum = 0
+    for sub_pair in itertools.combinations(set(sub_list), r=2):
+        for index_pair in itertools.product(sub_dict[sub_pair[0]], sub_dict[sub_pair[1]]):
+            betwen_sub_sum += cosine_similarity(gv_array[index_pair[0]], gv_array[index_pair[1]])
+    betwen_sub_sum /= comb(N=N_sub, k=2)*N_ses**2
+    
+    return within_sub_sum - betwen_sub_sum    
