@@ -18,6 +18,7 @@ def identifiability(sub_list, ses_list, gv_array, measure, ses1, ses2):
     
     ###--- Import packages
     from scipy.stats.stats import pearsonr
+    from scipy.spatial.distance import cityblock, euclidean, minkowski, braycurtis
     
     ###--- Define cosine similarity between two vectors
     def dot(A,B): 
@@ -27,19 +28,23 @@ def identifiability(sub_list, ses_list, gv_array, measure, ses1, ses2):
     
     ###--- Find number of subjects and number of sessions
     N_ses = int(max(ses_list))
-    N_sub = int(len(sub_list)/N_ses)
+    N_sub = (len(sub_list))
     
     ###--- Calculate identifiability matrix
     I_mat = np.zeros((N_sub,N_sub))
-    if measure == 'cosine':
+    if measure == 'euclidean':
         for sub1 in range(N_sub):
             for sub2 in range(N_sub):
-                I_mat[int(sub1)-1,int(sub2)-1] = cosine_similarity(gv_array[int(sub1)*N_ses+ses1-3,:],gv_array[int(sub2)*N_ses+ses2-3,:])
-    elif measure == 'pearsonr':
-         for sub1 in range(N_sub):
+                I_mat[int(sub1)-1,int(sub2)-1] = euclidean(gv_array[int(sub1)*N_ses+ses1-3,:],gv_array[int(sub2)*N_ses+ses2-3,:])
+    elif measure == 'cityblock':
+        for sub1 in range(N_sub):
             for sub2 in range(N_sub):
-                I_mat[int(sub1)-1,int(sub2)-1] = pearsonr(gv_array[int(sub1)*N_ses+ses1-3,:],gv_array[int(sub2)*N_ses+ses2-3,:])[0]
-    
+                I_mat[int(sub1)-1,int(sub2)-1] = cityblock(gv_array[int(sub1)*N_ses+ses1-3,:],gv_array[int(sub2)*N_ses+ses2-3,:])
+    elif measure == 'braycurtis':
+        for sub1 in range(N_sub):
+            for sub2 in range(N_sub):
+                I_mat[int(sub1)-1,int(sub2)-1] = braycurtis(gv_array[int(sub1)*N_ses+ses1-3,:],gv_array[int(sub2)*N_ses+ses2-3,:])
+                
     ###--- Create an out-of-diagonal elements mask
     out = np.ones((len(sub_complete),len(sub_complete)),dtype=bool)
     np.fill_diagonal(out,0)
@@ -47,8 +52,10 @@ def identifiability(sub_list, ses_list, gv_array, measure, ses1, ses2):
     I_others=np.mean(I_mat[out])
     ###---Similarity of subject to himself, averaged over all subjects
     I_self = np.mean(np.diagonal(I_mat))
-    I_diff=I_self-I_others
+    I_diff=I_self/I_others
     return I_diff
+
+
 
 
 def beta_lin_comb(path, beta):
