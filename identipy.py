@@ -83,7 +83,7 @@ def beta_lin_comb(path, beta):
     sess = ['1','2','3','4']
     meta_atl = ['pow','har','dos','aal','mul'] 
     meta_mod = ['cor','cov','par','pre']
-    N_thr = 5  # number of thresholds
+    N_thr = len(beta[9:]) # number of thresholds
     N_gvm = 10 # number of gv measures
     N_atl = len(meta_atl)
     N_mod = len(meta_mod) 
