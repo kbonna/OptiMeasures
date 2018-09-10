@@ -279,6 +279,7 @@ def load_data(path, meta):
                                     f'{atl}' in f and
                                     f'{mod}' in f]
                     if len(filename) != 1:
+                        print(filename)
                         raise Exception('Missing file. Aborting data loading...')
                     GVDAT[4*sub+ses, idx_atl, idx_mod] = np.loadtxt(path + filename[0]) 
     return GVDAT, sub_list
