@@ -55,103 +55,51 @@ def identifiability(sub_list, ses_list, gv_array, measure, ses1, ses2):
     I_diff=I_self/I_others
     return I_diff
 
-
-
-
-def beta_lin_comb(path, beta):
+def beta_lin_comb(beta, GVDAT, meta):
     '''
-    This  function  collapses graph vectors calculated for different types of atlases, models and 
-    thresholds into single vector being a linear combination of weighted graph measures according 
-    to provided beta vector. It works on entire dataset, all subjects and sessions.  
-
-    Input arguments consist of:
-        path(str):      path to folder containing graph vector data (GV.txt files)
-        beta(list):     vector of beta weights, by convetion:     
-                              beta[:5]  are atlas weights,
-                              beta[5:9] are model weights, and
-                              beta[9:]  are threshold weights
-
-    Output is tuple (sub_list, ses_list, gv_array) where:
-        sub_list(list): subject id's for each row of gv_array
-        ses_list(list):       session number for each row of gv_array
-        gv_array(np.ndarray): each row contains linear combination of graph vectors according to
-                              beta weights, shape is (N_sub*N_ses, N_gvm)
-
-    Kamil Bonna, 17.08.2018
+    This function calculates linear combinations of graph vectors stored in GVDAT
+    for all subjects and all sessions given the weights vector beta.
+    
+    Input arguments:
+        beta(list) - list of metaparameter weights
+        GVDAT(ndarray) - 5d data structure storing graph vectors
+    
+    Output:
+        gv_array(array) - 2d array of aggregated graph vectors for all scans
+        
+    Kamil Bonna, 10.09.2018    
     '''
-    #=== inner variables
-    sess = ['1','2','3','4']
-    meta_atl = ['pow','har','dos','aal','mul'] 
-    meta_mod = ['cor','cov','par','pre']
-    N_thr = len(beta[9:]) # number of thresholds
-    N_gvm = 10 # number of gv measures
-    N_atl = len(meta_atl)
-    N_mod = len(meta_mod) 
-    
-    import os
-    #--- check inputs
-    if type(beta) != list: 
-        raise Exception('beta should be a list!')
-    if len(beta) != (N_atl+N_mod+N_thr): 
-        raise Exception('len(beta) should be {}, but is {}'.format(str(N_atl+N_mod+N_thr), str(len(beta))))
-    if not os.path.exists(path):
-        raise Exception('path does not exist')
-    
     import numpy as np
     import math
-
-    def shrink_zeros(meta_par, beta_par):
-        meta_par_shrink = [meta_par[idx] for idx, beta in enumerate(beta_par) if beta > 0]
-        beta_par_shrink = [beta for beta in beta_par if beta > 0]
-        return meta_par_shrink, beta_par_shrink
-
-    def file_condition(filename, *args):
-        for word in args:
-            if filename.find(word) == -1: return False
-        return True
 
     def normalize_beta(beta):
         sum_weight = sum([b1*b2*b3 for b1 in beta[:N_atl] for b2 in beta[N_atl:N_atl+N_mod] for b3 in beta[-N_thr:]])
         return [ b/math.pow(sum_weight, 1/3) for b in beta ]
-
-    #--- get files, ensure correct extension, extract subjects
-    gv_files = os.listdir(path)
-    gv_files = [file for file in gv_files if file.find('GV.txt') != -1] 
-    subs = set([file[11:13] for file in gv_files]) 
-    #--- remove subjects with missing files
-    for sub in subs:
-        if sum(file.find(sub) != -1 for file in gv_files) != N_atl*N_mod*4:
-            subs.remove(sub)
-    subs = list(subs)
-    subs.sort(key=str)
-    if not subs: raise Exception('graph vector files not found or incomplete!')
-    #--- normalize beta & exclude unused files & beta=0 values
-    beta = normalize_beta(beta)
-    meta_atl, beta_atl = shrink_zeros(meta_atl, beta[:N_atl]) 
-    meta_mod, beta_mod = shrink_zeros(meta_mod, beta[N_atl:N_atl+N_mod])
-    beta_thr = beta[-N_thr:]  
     
-    #=== calculate output
-    sub_list = []
-    ses_list = []
-    gv_array = np.zeros((len(subs)*len(sess), N_gvm), dtype='float') # initialize array
-    idx = 0
-    for sub in subs:
-        for ses in sess:
-            sub_list.append(sub)
-            ses_list.append(ses)
-            #print('Sub:{}, Ses:{}'.format(sub,ses))
-            #=== calculate G_beta for single scanning (one sub, one ses)     
-            for idx_atl, atl in enumerate(meta_atl):
-                for idx_mod, mod in enumerate(meta_mod):
-                    filename = [file for file in gv_files if file_condition(file,atl,mod,'sub'+sub,'ses'+ses)] 
-                    measures = np.loadtxt(path + filename[0])
-                    # beta_final = beta_atl * beta_mod * beta_thr (individual weights)
-                    beta_final = [beta_atl[idx_atl] * beta_mod[idx_mod] * beta for beta in beta_thr]
-                    for idx_thr, row in enumerate(measures):
-                        gv_array[idx] += beta_final[idx_thr] * row
-            idx += 1
-    return sub_list, ses_list, gv_array
+    #--- dataset dimensionality
+    N_sub = meta['N_sub']
+    N_ses = meta['N_ses']
+    N_gvm = meta['N_gvm'] 
+    N_thr = len(meta['thr'])  
+    N_atl = len(meta['atl'])
+    N_mod = len(meta['mod'])
+
+    #--- normalize and split full beta vector
+    beta = normalize_beta(beta)
+    beta_atl = beta[:N_atl]
+    beta_mod = beta[N_atl:N_atl+N_mod]
+    beta_thr = beta[-N_thr:]
+
+    #--- calculate linear combintations
+    gv_array = np.zeros((N_sub*N_ses, N_gvm), dtype='float') 
+    for scan in range(N_sub*N_ses):
+        gvlc = 0                     # graph-vector linear combination
+        for atl in range(N_atl):
+            for mod in range(N_mod):
+                for thr in range(N_thr):
+                    gvlc += GVDAT[scan][atl][mod][thr] * beta_atl[atl] * beta_mod[mod] * beta_thr[thr]
+        gv_array[scan] = gvlc
+    return gv_array
 
 def calc_graph_vector(filename, thresholds) :
     '''
@@ -284,3 +232,53 @@ def quality_function(sub_list, gv_array, similarity):
     betwen_sub_sum /= comb(N=N_sub, k=2)*N_ses**2
     
     return within_sub_sum / betwen_sub_sum     
+
+def load_data(path, meta):
+    '''
+    This functions is loading the graph vector data from separate GV.txt files into 
+    one 5d-numpy-array.
+    
+    Input argument: 
+        path(str) - path to folder containing GV.txt files
+        meta(dict) - dataset and metaparameter description
+    
+    Outputs:
+        GVDAT(ndarray) - 5d array with all graph data 
+        sub_list(list) - list with subject numbers corresponding to 1st dimension 
+            in GVDAT array
+            
+    Kamil Bonna, 10.09.2018
+    '''
+    import os
+    import numpy as np
+
+    #--- dataset dimensionality
+    N_sub = meta['N_sub']
+    N_ses = meta['N_ses']
+    N_gvm = meta['N_gvm'] 
+    N_thr = len(meta['thr'])  
+    N_atl = len(meta['atl'])
+    N_mod = len(meta['mod'])
+    
+    #--- get files, ensure correct extension, extract subjects
+    gv_files = os.listdir(path)
+    gv_files = [file for file in gv_files if file.find('GV.txt') != -1] 
+    subs = sorted(list(set([file[11:13] for file in gv_files])))   # bring out sub number (as str)
+    sub_list = [[sub for ses in range(N_ses)] for sub in subs]     # include multiple sessions
+    sub_list = [sub for ses in sub_list for sub in ses]            # unnest list
+
+    #--- load data and store in GVDAT array
+    GVDAT = np.zeros((N_ses*N_sub, N_atl, N_mod, N_thr, N_gvm), dtype='float') 
+    for sub in range(N_sub):                                       # subjects
+        for ses in range(N_ses):                                   # sessions
+            for idx_atl, atl in enumerate(meta['atl']):            # atlas
+                for idx_mod, mod in enumerate(meta['mod']):        # model
+                    filename = [f for f in os.listdir(path) if 
+                                    f'sub{subs[sub]}' in f and 
+                                    f'ses{str(ses+1)}' in f and
+                                    f'{atl}' in f and
+                                    f'{mod}' in f]
+                    if len(filename) != 1:
+                        raise Exception('Missing file. Aborting data loading...')
+                    GVDAT[4*sub+ses, idx_atl, idx_mod] = np.loadtxt(path + filename[0]) 
+    return GVDAT, sub_list
